@@ -6,6 +6,52 @@ AI-Assisted Web Security Misconfiguration Scanner
 
 ---
 
+## 🧭 What SecProbe Is (and Isn't)
+
+SecProbe is a **configuration and hygiene scanner**, not a full vulnerability scanner. Its core is checking whether a target has the security-relevant settings it *should* have — headers, cookie flags, TLS config, obviously risky open ports. As of this version it also does **optional, best-effort CVE matching** against banner-advertised software versions (see caveats below). It does not send exploit payloads and does not attempt to actively break anything. If you're used to tools like Nessus, Nuclei, or OWASP ZAP, SecProbe still sits in a narrower category — closer to Mozilla Observatory or SSL Labs' SSL Test with a version-fingerprinting layer bolted on, rather than a full active vulnerability scanner.
+
+Being upfront about this matters more to us than the marketing appeal of a bigger label. A misconfig scanner that's honest about its scope is more useful — and more trustworthy — than a "vulnerability scanner" that quietly only checks headers.
+
+### How it compares
+
+| Capability | SecProbe | Nessus / OpenVAS / Qualys | Nikto | Nuclei | OWASP ZAP |
+|---|---|---|---|---|---|
+| HTTP security header audit | ✅ core focus | partial | partial | via community templates | partial |
+| Cookie flag audit (Secure/HttpOnly/SameSite) | ✅ | partial | ❌ | via templates | ✅ |
+| SSL/TLS config check (protocol, cipher, expiry, SAN) | ✅ | ✅ | ❌ | via templates | ❌ |
+| Common risky port exposure check | ✅ (static list) | ✅ (extensive) | ❌ | ❌ | ❌ |
+| Software/version fingerprinting → CVE matching | ⚠️ opt-in, banner-based only (`--cve`) | ✅ (large, maintained DB, deeper detection) | basic | ✅ (community-driven) | limited |
+| Active exploit probing (SQLi, XSS, SSRF, RCE payloads) | ❌ | ✅ | basic | ✅ | ✅ (core focus, incl. proxy/fuzzer) |
+| Authenticated / crawled deep scanning | ❌ | ✅ | ❌ | some | ✅ |
+| Plain-English, beginner-friendly explanations | ✅ (AI layer) | ❌ (dense, expert-oriented) | ❌ | ❌ | ❌ |
+| Setup cost | free, single CLI command | commercial, or heavy self-hosted server (OpenVAS) | free, lightweight | free, lightweight | free, heavier GUI/proxy setup |
+| Typical scan time (single host) | under a few seconds (longer with `--cve`, due to NVD rate limits) | minutes to hours | seconds to minutes | seconds to minutes | minutes (interactive) |
+
+### Where SecProbe genuinely adds value
+
+- **Explains findings in plain language, with copy-paste fixes.** The AI layer (Gemini / Groq / offline rule engine) turns a raw header-diff into "here's what this means, here's the nginx/Apache/Flask snippet to fix it" — something the expert-oriented output of Nessus or OpenVAS doesn't prioritize.
+- **Zero setup friction.** No account, no license, no heavyweight scan engine to stand up — one command, results in under a second for a header+SSL scan.
+- **Good as a fast first pass or a CI/CD gate**, e.g. failing a build if a new deploy drops HSTS or exposes a database port — not as a replacement for a real penetration test or an authenticated deep scan.
+
+### ⚠️ CVE Matching (`--cve`) — read this before you trust the output
+
+This mode reads whatever version string a server *volunteers* in headers like `Server` and `X-Powered-By`, and cross-references it against the official [NVD](https://nvd.nist.gov/) database. It is **not** equivalent to what Nessus/OpenVAS do:
+
+- **Banner-based only.** No behavioral fingerprinting, no probing — just reading what the server advertises. Many servers strip or fake this header deliberately; reverse proxies and CDNs frequently rewrite it. A missing or generic banner means zero CVE findings, not a clean bill of health.
+- **Keyword-matched, not CPE-matched.** SecProbe uses NVD's free-text `keywordSearch`, not a precise CPE lookup, so it filters for CVEs whose advisory text actually mentions the detected version — anything that doesn't match is labeled `loosely matched` rather than silently hidden or silently trusted.
+- **Every finding needs manual verification.** Treat `--cve` output as "worth checking," not "confirmed vulnerable." This is explicitly reflected in the fix text on every CVE issue it raises.
+- **Rate-limited by NVD.** Without a free API key, NVD allows 5 requests/30s, so a `--cve` scan with several detected components will take longer. Get a free key at https://nvd.nist.gov/developers/request-an-api-key and pass it via `--nvd-key` or the `NVD_API_KEY` env var for higher throughput.
+
+### What it still deliberately doesn't do
+
+- No active payload testing for SQLi/XSS/SSRF/etc. — it won't try to break the target, only audit its declared configuration and publicly known CVEs against what it advertises.
+- No authenticated or crawled scanning of application logic.
+- No CPE-precise vulnerability matching — see the CVE caveats above.
+
+If any of the above get added later, this README will be updated to reflect that rather than claiming it upfront.
+
+---
+
 ## 🤖 Free AI Providers
 
 SecProbe supports three AI modes — all completely free:
@@ -50,6 +96,11 @@ export GROQ_API_KEY=your_free_key
 secprobe example.com --ai
 
 secprobe example.com --ports --ai --verbose
+
+secprobe example.com --cve
+
+export NVD_API_KEY=your_free_nvd_key
+secprobe example.com --cve --verbose
 
 secprobe example.com --ai --output report.json
 
@@ -110,6 +161,11 @@ curl -X POST http://localhost:5000/scan \
 curl -X POST http://localhost:5000/scan \
   -H "Content-Type: application/json" \
   -d '{"target": "example.com", "scan_ports": true, "use_ai": true}'
+
+ With CVE matching (banner-based, best-effort — see README caveats)
+curl -X POST http://localhost:5000/scan \
+  -H "Content-Type: application/json" \
+  -d '{"target": "example.com", "check_cve": true}'
 ```
 
 ### API Response
@@ -169,6 +225,7 @@ SECPROBE_PORT=5000
 |---|---|---|
 | `GEMINI_API_KEY` | — | Google Gemini free API key |
 | `GROQ_API_KEY` | — | Groq free API key |
+| `NVD_API_KEY` | — | Optional free NVD key for higher rate limits during `--cve` scans |
 | `SECPROBE_API_KEY` | — | Optional REST API protection key |
 | `SECPROBE_HOST` | `0.0.0.0` | API bind address |
 | `SECPROBE_PORT` | `5000` | API port |
@@ -188,6 +245,7 @@ secprobe/
 │       ├── headers.py        ← HTTP security headers scanner
 │       ├── ssl_checker.py    ← SSL/TLS cert & config checker
 │       ├── port_scanner.py   ← Port exposure (nmap + socket fallback)
+│       ├── version_fingerprint.py  ← Banner-based version detection + NVD CVE matching (opt-in, --cve)
 │       └── ai_explainer.py   ← Free AI: Gemini / Groq / Offline
 ├── tests/test_secprobe.py    ← Pytest test suite
 ├── install.sh                ← Kali Linux one-command installer

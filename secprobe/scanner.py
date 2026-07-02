@@ -10,6 +10,7 @@ from typing import Optional
 from .modules.headers import HeaderScanner
 from .modules.ssl_checker import SSLChecker
 from .modules.port_scanner import PortScanner
+from .modules.version_fingerprint import VersionFingerprinter
 from .modules.ai_explainer import AIExplainer
 
 SEVERITY_WEIGHTS = {
@@ -25,12 +26,16 @@ class SecProbe:
         use_ai: bool = True,
         gemini_key: Optional[str] = None,
         groq_key: Optional[str] = None,
+        check_cve: bool = False,
+        nvd_api_key: Optional[str] = None,
     ):
         self.target = self._normalize_target(target)
         self.scan_ports = scan_ports
         self.use_ai = use_ai
         self.gemini_key = gemini_key
         self.groq_key = groq_key
+        self.check_cve = check_cve
+        self.nvd_api_key = nvd_api_key
         self.issues = []
         self.score = 100
         self.scan_time = 0
@@ -47,11 +52,6 @@ class SecProbe:
     def _fetch_response(self):
         try:
             return requests.get(self.target, timeout=10, allow_redirects=True, verify=False)
-        except requests.exceptions.SSLError:
-            try:
-                return requests.get(self.target, timeout=10, verify=False, allow_redirects=True)
-            except Exception:
-                return None
         except Exception:
             return None
 
@@ -61,11 +61,27 @@ class SecProbe:
         hostname = self._get_hostname()
         all_issues = []
 
+        # Debug fingerprint: proves this run actually hit *this* target and
+        # didn't silently reuse a prior response. Compare this across domains
+        # if two scans ever look suspiciously identical.
+        self.debug_info = {
+            "requested_target": self.target,
+            "resolved_hostname": hostname,
+            "final_url_after_redirects": response.url if response is not None else None,
+            "status_code": response.status_code if response is not None else None,
+            "raw_headers": dict(response.headers) if response is not None else {},
+        }
+
         all_issues.extend(HeaderScanner(response).scan())
         all_issues.extend(SSLChecker(hostname).scan())
 
         if self.scan_ports:
             all_issues.extend(PortScanner(hostname).scan())
+
+        if self.check_cve:
+            all_issues.extend(
+                VersionFingerprinter(response, nvd_api_key=self.nvd_api_key).scan()
+            )
 
         if self.use_ai:
             explainer = AIExplainer(
@@ -91,6 +107,7 @@ class SecProbe:
             "scan_time_seconds": self.scan_time,
             "total_issues": len(self.issues),
             "issues": self.issues,
+            "debug": self.debug_info,
             "summary": {
                 "critical": sum(1 for i in self.issues if i.get("severity") == "Critical"),
                 "high":     sum(1 for i in self.issues if i.get("severity") == "High"),

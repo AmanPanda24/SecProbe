@@ -132,6 +132,12 @@ def print_report(report, verbose=False):
 @click.command()
 @click.argument("target")
 @click.option("--ports", "-p", is_flag=True, default=False, help="Enable port scanning via nmap")
+@click.option("--cve", is_flag=True, default=False,
+              help="Check detected Server/X-Powered-By version banners against the NVD CVE database "
+                   "(banner-based, best-effort — see README for accuracy caveats)")
+@click.option("--nvd-key", envvar="NVD_API_KEY", default=None,
+              help="Free NVD API key for higher rate limits (or set NVD_API_KEY env var). "
+                   "Get one at https://nvd.nist.gov/developers/request-an-api-key")
 @click.option("--ai", is_flag=True, default=False,
               help="Enable AI explanations (auto-picks Gemini/Groq/Offline)")
 @click.option("--gemini-key", envvar="GEMINI_API_KEY", default=None,
@@ -141,7 +147,9 @@ def print_report(report, verbose=False):
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Show full details")
 @click.option("--output", "-o", default=None, help="Save report to JSON file")
 @click.option("--no-banner", is_flag=True, default=False, help="Suppress banner")
-def main(target, ports, ai, gemini_key, groq_key, verbose, output, no_banner):
+@click.option("--debug", is_flag=True, default=False,
+              help="Print the raw fetched status code and headers before the report, to verify the scan actually hit this target")
+def main(target, ports, cve, nvd_key, ai, gemini_key, groq_key, verbose, output, no_banner, debug):
     """
     SecProbe - AI-Assisted Web Security Misconfiguration Scanner
 
@@ -158,6 +166,8 @@ def main(target, ports, ai, gemini_key, groq_key, verbose, output, no_banner):
       secprobe example.com --ai --gemini-key KEY      # AI with Gemini (free)
       secprobe example.com --ai --groq-key KEY        # AI with Groq (free)
       secprobe example.com --ports --ai --verbose     # Full scan
+      secprobe example.com --cve                      # Check version banners against NVD CVEs
+      secprobe example.com --cve --nvd-key KEY        # CVE check with higher NVD rate limit
       secprobe example.com --output report.json       # Save report
     """
     if not no_banner:
@@ -167,6 +177,9 @@ def main(target, ports, ai, gemini_key, groq_key, verbose, output, no_banner):
     print_ai_status(gemini_key, groq_key, ai)
     if ports:
         click.echo(f"  {Fore.YELLOW}Ports    : scanning enabled (may take longer)...{Style.RESET_ALL}")
+    if cve:
+        click.echo(f"  {Fore.YELLOW}CVE check: enabled — banner-based, best-effort (see README). "
+                    f"May take longer due to NVD rate limits.{Style.RESET_ALL}")
     click.echo()
 
     try:
@@ -176,8 +189,23 @@ def main(target, ports, ai, gemini_key, groq_key, verbose, output, no_banner):
             use_ai=ai,
             gemini_key=gemini_key,
             groq_key=groq_key,
+            check_cve=cve,
+            nvd_api_key=nvd_key,
         )
         report = scanner.run()
+
+        if debug:
+            d = report.get("debug", {})
+            click.echo(f"  {Fore.MAGENTA}── DEBUG FINGERPRINT ──{Style.RESET_ALL}")
+            click.echo(f"  Requested target : {d.get('requested_target')}")
+            click.echo(f"  Resolved host    : {d.get('resolved_hostname')}")
+            click.echo(f"  Final URL        : {d.get('final_url_after_redirects')}")
+            click.echo(f"  Status code      : {d.get('status_code')}")
+            click.echo(f"  Raw headers      :")
+            for k, v in d.get("raw_headers", {}).items():
+                click.echo(f"    {k}: {v}")
+            click.echo()
+
         print_report(report, verbose=verbose)
 
         if output:

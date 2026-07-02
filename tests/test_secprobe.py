@@ -8,7 +8,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from secprobe.scanner import SecProbe
 from secprobe.modules.headers import HeaderScanner
+from secprobe.modules.version_fingerprint import VersionFingerprinter
 from secprobe.modules.ai_explainer import AIExplainer, OfflineExplainer
+from unittest.mock import patch, MagicMock
 
 
 class MockResponse:
@@ -78,6 +80,79 @@ class TestScoring:
         assert SecProbe._grade(65) == "C"
         assert SecProbe._grade(50) == "D"
         assert SecProbe._grade(20) == "F"
+
+class TestVersionFingerprinter:
+    def _mock_nvd(self, cve_id, description, cvss_score, status_code=200):
+        def fake_get(url, params=None, headers=None, timeout=None):
+            resp = MagicMock()
+            resp.status_code = status_code
+            resp.json.return_value = {
+                "vulnerabilities": [{
+                    "cve": {
+                        "id": cve_id,
+                        "descriptions": [{"lang": "en", "value": description}],
+                        "metrics": {"cvssMetricV31": [{"cvssData": {"baseScore": cvss_score}}]},
+                    }
+                }]
+            }
+            return resp
+        return fake_get
+
+    def test_detects_version_from_server_header(self):
+        resp = MockResponse(headers={"Server": "nginx/1.18.0 (Ubuntu)"})
+        with patch("secprobe.modules.version_fingerprint.requests.get",
+                   side_effect=self._mock_nvd("CVE-2021-23017", "issue in nginx 1.18.0", 9.4)), \
+             patch("secprobe.modules.version_fingerprint.time.sleep", return_value=None):
+            issues = VersionFingerprinter(resp).scan()
+        types = [i["type"] for i in issues]
+        assert any("Version Disclosure: nginx 1.18.0" in t for t in types)
+
+    def test_matches_cve_mentioning_exact_version(self):
+        resp = MockResponse(headers={"Server": "nginx/1.18.0"})
+        with patch("secprobe.modules.version_fingerprint.requests.get",
+                   side_effect=self._mock_nvd("CVE-2021-23017", "A flaw in nginx 1.18.0 resolver.", 9.4)), \
+             patch("secprobe.modules.version_fingerprint.time.sleep", return_value=None):
+            issues = VersionFingerprinter(resp).scan()
+        cve_issues = [i for i in issues if i["category"] == "Known Vulnerabilities (CVE)"]
+        assert len(cve_issues) == 1
+        assert cve_issues[0]["severity"] == "Critical"
+        assert "loosely matched" not in cve_issues[0]["detail"]
+
+    def test_falls_back_to_loose_match_when_version_not_in_text(self):
+        resp = MockResponse(headers={"Server": "nginx/1.18.0"})
+        with patch("secprobe.modules.version_fingerprint.requests.get",
+                   side_effect=self._mock_nvd("CVE-9999-0001", "An unrelated generic nginx issue.", 5.0)), \
+             patch("secprobe.modules.version_fingerprint.time.sleep", return_value=None):
+            issues = VersionFingerprinter(resp).scan()
+        cve_issues = [i for i in issues if i["category"] == "Known Vulnerabilities (CVE)"]
+        assert len(cve_issues) == 1
+        assert "loosely matched" in cve_issues[0]["detail"]
+
+    def test_handles_nvd_rate_limit_gracefully(self):
+        resp = MockResponse(headers={"Server": "nginx/1.18.0"})
+        with patch("secprobe.modules.version_fingerprint.requests.get",
+                   side_effect=self._mock_nvd("x", "x", 0, status_code=403)), \
+             patch("secprobe.modules.version_fingerprint.time.sleep", return_value=None):
+            issues = VersionFingerprinter(resp).scan()
+        assert any("CVE Lookup Failed" in i["type"] for i in issues)
+
+    def test_no_response_returns_no_issues(self):
+        assert VersionFingerprinter(None).scan() == []
+
+    def test_no_version_headers_returns_no_lookup(self):
+        resp = MockResponse(headers={"Content-Type": "text/html"})
+        with patch("secprobe.modules.version_fingerprint.requests.get") as mock_get:
+            issues = VersionFingerprinter(resp).scan()
+        mock_get.assert_not_called()
+        assert issues == []
+
+    def test_cdn_banner_skips_cve_lookup(self):
+        resp = MockResponse(headers={"Server": "cloudflare/1.0"})
+        with patch("secprobe.modules.version_fingerprint.requests.get") as mock_get:
+            issues = VersionFingerprinter(resp).scan()
+        mock_get.assert_not_called()
+        assert any("Version Disclosure" in i["type"] for i in issues)
+
 
 class TestOfflineExplainer:
     def test_enriches_all_issues(self):

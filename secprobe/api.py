@@ -68,6 +68,8 @@ def docs():
                 "target": "(required) URL or domain. e.g. 'example.com'",
                 "scan_ports": "(optional, bool) Enable port scanning. Default: false",
                 "use_ai": "(optional, bool) Enable AI enrichment. Default: false. Uses free providers automatically.",
+                "check_cve": "(optional, bool) Check detected version banners against NVD CVEs. Banner-based, "
+                             "best-effort — see README. Default: false. Set NVD_API_KEY env var for higher rate limits.",
             },
             "ai_providers": {
                 "auto_selection": "Gemini (if GEMINI_API_KEY set) → Groq (if GROQ_API_KEY set) → Offline (always)",
@@ -92,8 +94,10 @@ def scan():
             target=target,
             scan_ports=bool(data.get("scan_ports", False)),
             use_ai=bool(data.get("use_ai", False)),
+            check_cve=bool(data.get("check_cve", False)),
             gemini_key=os.environ.get("GEMINI_API_KEY"),
             groq_key=os.environ.get("GROQ_API_KEY"),
+            nvd_api_key=os.environ.get("NVD_API_KEY"),
         )
         return jsonify(scanner.run()), 200
     except Exception as e:

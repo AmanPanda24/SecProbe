@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  secprobe-api:
+    build: .
+    container_name: secprobe-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - SECPROBE_HOST=0.0.0.0
+      - SECPROBE_PORT=5000
+      - SECPROBE_DEBUG=false
+      
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      
+    volumes:
+      - ./reports:/app/reports
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

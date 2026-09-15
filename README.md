@@ -2,17 +2,17 @@
 
 Nikto-inspired Web Security Scanner with AI-assisted analysis
 
-> Developed by Aman Kumar Panda | Version 1.0.0 | 100% Free AI — No paid keys required
+> Developed by Aman Kumar Panda | Version 1.0.0 | 100% Free AI (No paid keys required).
 
 ---
 
 ## 🧭 What SecProbe Is (and Isn't)
 
-SecProbe is a **configuration and hygiene scanner**, not a full vulnerability scanner. Its core is checking whether a target has the security-relevant settings it *should* have — headers, cookie flags, TLS config, obviously risky open ports — plus a set of Nikto-style, non-exploitative reconnaissance checks (common exposed paths, HTTP methods, CORS, directory listing, technology fingerprinting). As of this version it also does **optional, best-effort CVE matching** against banner-advertised software versions (see caveats below). It does not send exploit payloads and does not attempt to actively break anything.
+SecProbe is a **configuration and hygiene scanner**, not a full vulnerability scanner. Its core is checking whether a target has the security relevant settings it *should* have headers, cookie flags, TLS config, obviously risky open ports plus a set of Nikto-style, non-exploitative reconnaissance checks (common exposed paths, HTTP methods, CORS, directory listing, technology fingerprinting). As of this version it also does **optional, best-effort CVE matching** against banner-advertised software versions (see caveats below). It does not send exploit payloads and does not attempt to actively break anything.
 
-If you're used to tools like Nessus, Nuclei, or OWASP ZAP, SecProbe still sits in a narrower category — closer to Nikto or Mozilla Observatory/SSL Labs' SSL Test with a version-fingerprinting layer bolted on, rather than a full active vulnerability scanner.
+If you're used to tools like Nessus, Nuclei, or OWASP ZAP, SecProbe still sits in a narrower category closer to Nikto or Mozilla Observatory/SSL Labs' SSL Test with a version-fingerprinting layer bolted on, rather than a full active vulnerability scanner.
 
-Being upfront about this matters more to us than the marketing appeal of a bigger label. A misconfig scanner that's honest about its scope is more useful — and more trustworthy — than a "vulnerability scanner" that quietly only checks headers.
+Being upfront about this matters more to us than the marketing appeal of a bigger label. A misconfig scanner that's honest about its scope is more useful and more trustworthy than a "vulnerability scanner" that quietly only checks headers.
 
 ### How it compares
 
@@ -34,24 +34,24 @@ Being upfront about this matters more to us than the marketing appeal of a bigge
 ### Where SecProbe genuinely adds value
 
 - **Explains findings in plain language, with copy-paste fixes.** The AI layer (Gemini / Groq / offline rule engine) turns a raw header-diff or exposed-path finding into "here's what this means, here's the nginx/Apache/Flask snippet to fix it."
-- **Zero setup friction.** No account, no license, no heavyweight scan engine to stand up — one command, results in seconds for a header+SSL+recon scan.
+- **Zero setup friction.** No account, no license, no heavyweight scan engine to stand up one command, results in seconds for a header+SSL+recon scan.
 - **False-positive aware.** Common-path discovery (`--no-discover` to skip it) uses a soft-404 baseline check: it first probes a path that shouldn't exist, and only reports a "real" file if the response actually differs from that baseline. This avoids flooding you with false "Critical: database.sql exposed" findings on sites that return HTTP 200 for everything (common with SPAs and custom error pages).
 - **Good as a fast first pass or a CI/CD gate**, e.g. failing a build if a new deploy drops HSTS, exposes `.env`, or opens a database port — not as a replacement for a real penetration test or an authenticated deep scan.
 
-### ⚠️ CVE Matching (`--cve`) — read this before you trust the output
+### ⚠️ CVE Matching (`--cve`) read this before you trust the output
 
 This mode reads whatever version string a server *volunteers* in headers like `Server` and `X-Powered-By`, and cross-references it against the official [NVD](https://nvd.nist.gov/) database. It is **not** equivalent to what Nessus/OpenVAS do:
 
-- **Banner-based only.** No behavioral fingerprinting, no probing — just reading what the server advertises. Many servers strip or fake this header deliberately; reverse proxies and CDNs frequently rewrite it. A missing or generic banner means zero CVE findings, not a clean bill of health.
-- **Keyword-matched, not CPE-matched.** SecProbe uses NVD's free-text `keywordSearch`, not a precise CPE lookup, so it filters for CVEs whose advisory text actually mentions the detected version — anything that doesn't match is labeled `loosely matched` rather than silently hidden or silently trusted.
+- **Banner-based only.** No behavioral fingerprinting, no probing just reading what the server advertises. Many servers strip or fake this header deliberately; reverse proxies and CDNs frequently rewrite it. A missing or generic banner means zero CVE findings, not a clean bill of health.
+- **Keyword-matched, not CPE-matched.** SecProbe uses NVD's free-text `keywordSearch`, not a precise CPE lookup, so it filters for CVEs whose advisory text actually mentions the detected version anything that doesn't match is labeled `loosely matched` rather than silently hidden or silently trusted.
 - **Every finding needs manual verification.** Treat `--cve` output as "worth checking," not "confirmed vulnerable."
 - **Rate-limited by NVD.** Without a free API key, NVD allows 5 requests/30s. Get a free key at https://nvd.nist.gov/developers/request-an-api-key and pass it via `--nvd-key` or the `NVD_API_KEY` env var for higher throughput.
 
 ### What it still deliberately doesn't do
 
-- No active payload testing for SQLi/XSS/SSRF/etc. — it won't try to break the target, only audit its declared configuration, publicly reachable resources, and publicly known CVEs against what it advertises.
+- No active payload testing for SQLi/XSS/SSRF/etc. it won't try to break the target, only audit its declared configuration, publicly reachable resources, and publicly known CVEs against what it advertises.
 - No authenticated or crawled scanning of application logic.
-- No CPE-precise vulnerability matching — see the CVE caveats above.
+- No CPE-precise vulnerability matching see the CVE caveats above.
 
 If any of the above get added later, this README will be updated to reflect that rather than claiming it upfront.
 
@@ -67,7 +67,7 @@ SecProbe 1.0 includes non-exploitative web-server/application reconnaissance ins
 - CORS policy checks (wildcard origin, credentials + wildcard, reflected origin)
 - technology fingerprinting from public responses (framework/CMS hints, `Server`, `X-Powered-By`)
 - common resource discovery (`robots.txt`, `sitemap.xml`, `security.txt`)
-- checks for commonly exposed diagnostics, VCS metadata, `.env`, backups and database dumps — with a **soft-404 baseline check** so sites that return HTTP 200 for everything don't produce false positives
+- checks for commonly exposed diagnostics, VCS metadata, `.env`, backups and database dumps with a **soft-404 baseline check** so sites that return HTTP 200 for everything don't produce false positives
 - directory-listing and verbose-error detection
 - optional Nmap port scanning (`--ports`) and banner-based NVD CVE matching (`--cve`)
 - AI/offline explanations and remediation
@@ -78,7 +78,7 @@ SecProbe does **not** send exploit payloads, brute-force credentials, or attempt
 
 ## 🤖 Free AI Providers
 
-SecProbe supports three AI modes — all completely free:
+SecProbe supports three AI modes all completely free:
 
 | Provider | Speed | Limits | Key Required |
 |---|---|---|---|
@@ -90,7 +90,7 @@ Get your free key (takes 30 seconds):
 - Gemini → https://aistudio.google.com/app/apikey
 - Groq → https://console.groq.com/keys
 
-No key at all? Just use `--ai` anyway — the offline engine activates automatically with full explanations and risk scores.
+No key at all? Just use `--ai` anyway the offline engine activates automatically with full explanations and risk scores.
 
 ---
 
@@ -151,13 +151,13 @@ secprobe example.com --debug           # print the fetch fingerprint (see Troubl
 ### CLI Output Example
 
 ```
-  01. [HIGH] Missing Content-Security-Policy [gemini]
+  01. [HIGH] Missing Content Security Policy [gemini]
       Category : HTTP Headers
-      Fix: add_header Content-Security-Policy "default-src 'self'";
+      Fix: add_header Content Security Policy "default-src 'self'";
 
-  02. [HIGH] Missing Strict-Transport-Security [offline]
+  02. [HIGH] Missing Strict Transport Security [offline]
       Category : HTTP Headers
-      Fix: add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      Fix: add_header Strict Transport Security "max-age=31536000; includeSubDomains" always;
 
   ──────────────────────────────────────────────────────────────
   Target  : https://example.com
@@ -380,10 +380,10 @@ Deductions: Critical −25 · High −15 · Medium −8 · Low −3
 ### v1.0.0 — Initial Release
 
 - Core scanner: HTTP security header + cookie audit, SSL/TLS certificate and configuration checks, common risky port exposure scanning, banner-based NVD CVE matching (`--cve`), and free AI explanations (Gemini / Groq / offline).
-- Nikto-like reconnaissance module (`web_checks.py`): common exposed-path discovery, HTTP method checks, CORS checks, directory-listing/verbose-error detection, and technology fingerprinting — all non-exploitative, read-only requests.
+- Nikto-like reconnaissance module (`web_checks.py`): common exposed-path discovery, HTTP method checks, CORS checks, directory-listing/verbose-error detection, and technology fingerprinting - all non-exploitative, read-only requests.
 - **Soft-404 baseline detection**: path discovery first probes a nonexistent path and only reports a "real" file if the response actually differs from that baseline, so sites that return HTTP 200 for everything (SPAs, custom error pages) don't produce false "exposed file" findings.
-- **Correct HTTPS/HTTP scheme handling**: bare hostnames (`secprobe example.com`) automatically fall back to HTTP if HTTPS fails, and the report's `target` / `debug.used_https` fields reflect what the scanner actually connected with — so an HTTP-only host is never mislabeled as HTTPS or given a misleading SSL/TLS check. An explicitly-typed scheme (`http://` or `https://`) is always respected as-is with no fallback.
-- `--debug` fingerprint (also in the API's `debug` field) showing requested target, resolved hostname, final URL after redirects, status code, `used_https`, redirect chain, and any connection errors — the fastest way to confirm two scans actually hit two different targets.
+- **Correct HTTPS/HTTP scheme handling**: bare hostnames (`secprobe example.com`) automatically fall back to HTTP if HTTPS fails, and the report's `target` / `debug.used_https` fields reflect what the scanner actually connected with so an HTTP-only host is never mislabeled as HTTPS or given a misleading SSL/TLS check. An explicitly-typed scheme (`http://` or `https://`) is always respected as-is with no fallback.
+- `--debug` fingerprint (also in the API's `debug` field) showing requested target, resolved hostname, final URL after redirects, status code, `used_https`, redirect chain, and any connection errors the fastest way to confirm two scans actually hit two different targets.
 - `--no-discover` / `discover` flag to skip resource-discovery checks for a fast header+TLS-only scan, and `--timeout` to tune the HTTP request timeout.
 - 38-test suite covering every module above, including regression tests for the scheme-handling and soft-404 fixes.
 
